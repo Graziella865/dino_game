@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Particle.ts — Démo Live</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #0d1117;
+      --surface: #161b22;
+      --border:  #21262d;
+      --accent:  #58a6ff;
+      --green:   #3fb950;
+      --sun:     #ffd700;
+      --rain:    #aed6f1;
+      --text:    #c9d1d9;
+      --dim:     #484f58;
+      --mono:    'Courier New', monospace;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--mono);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 28px 16px 48px;
+      gap: 18px;
+    }
+
+
+    header { text-align: center; }
+    header h1 { font-size: 1rem; letter-spacing: 5px; color: var(--accent); text-transform: uppercase; }
+    header p  { font-size: 0.65rem; color: var(--dim); letter-spacing: 3px; margin-top: 4px; }
+
+    
+    #canvas-wrap {
+      position: relative;
+      border: 1px solid var(--border);
+      box-shadow: 0 0 40px rgba(88,166,255,.12);
+    }
+    canvas { display: block; }
+
+    
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+      width: 100%;
+      max-width: 700px;
+    }
+
+    .ctrl-group {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 12px 16px;
+      flex: 1;
+      min-width: 180px;
+    }
+    .ctrl-group label {
+      display: block;
+      font-size: 0.6rem;
+      letter-spacing: 3px;
+      color: var(--dim);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+    }
+
+    
+    .toggle-row {
+      display: flex;
+      gap: 0;
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+    .toggle-btn {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: var(--dim);
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      letter-spacing: 2px;
+      padding: 8px 0;
+      cursor: pointer;
+      text-transform: uppercase;
+      transition: background .2s, color .2s;
+    }
+    .toggle-btn.active-rain  { background: #1a2f3e; color: var(--rain);  }
+    .toggle-btn.active-sun   { background: #2e2000; color: var(--sun);   }
+
+    
+    input[type=range] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 4px;
+      background: var(--border);
+      outline: none;
+      border-radius: 2px;
+      margin-top: 4px;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+    }
+    .slider-val { font-size: 0.65rem; color: var(--accent); float: right; }
+
+    
+    #debug {
+      width: 100%;
+      max-width: 700px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 10px 14px;
+      font-size: 0.62rem;
+      line-height: 2;
+      color: var(--dim);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0 32px;
+    }
+    #debug .k { color: var(--accent); }
+    #debug .v { color: var(--green); }
+
+    
+    #code-box {
+      width: 100%;
+      max-width: 700px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 14px 18px;
+      font-size: 0.63rem;
+      line-height: 1.8;
+      overflow-x: auto;
+      white-space: pre;
+      color: #8b949e;
+    }
+    .kw  { color: #ff7b72; }
+    .tp  { color: #ffa657; }
+    .str { color: #a5d6ff; }
+    .cm  { color: #484f58; font-style: italic; }
+    .fn  { color: #d2a8ff; }
+    .num { color: #79c0ff; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Particle.ts — Démo Live</h1>
+  <p>RÔLE A · ENGINE · EFFETS MÉTÉO</p>
+</header>
+
+<div id="canvas-wrap">
+  <canvas id="c" width="700" height="220"></canvas>
+</div>
+
+<div class="controls">
+
+  <div class="ctrl-group">
+    <label>TYPE D'EFFET</label>
+    <div class="toggle-row">
+      <button class="toggle-btn active-rain" id="btn-rain" onclick="setType('rain')">🌧 Pluie</button>
+      <button class="toggle-btn" id="btn-sun" onclick="setType('sun')">☀️ Soleil</button>
+    </div>
+  </div>
+
+  <div class="ctrl-group">
+    <label>PARTICULES <span class="slider-val" id="val-count">120</span></label>
+    <input type="range" id="sl-count" min="20" max="300" value="120"
+      oninput="document.getElementById('val-count').textContent=this.value; rebuildSystem()">
+  </div>
+
+  <div class="ctrl-group">
+    <label>VENT <span class="slider-val" id="val-wind">0</span></label>
+    <input type="range" id="sl-wind" min="-5" max="5" step="0.1" value="0"
+      oninput="document.getElementById('val-wind').textContent=parseFloat(this.value).toFixed(1); windX=parseFloat(this.value)">
+  </div>
+
+  <div class="ctrl-group">
+    <label>VITESSE JEU <span class="slider-val" id="val-speed">4</span></label>
+    <input type="range" id="sl-speed" min="0" max="12" step="0.5" value="4"
+      oninput="document.getElementById('val-speed').textContent=this.value; gameSpeed=parseFloat(this.value)">
+  </div>
+
+</div>
+
+<div id="debug">
+  <div><span class="k">TYPE</span> <span class="v" id="d-type">rain</span></div>
+  <div><span class="k">COUNT</span> <span class="v" id="d-count">120</span></div>
+  <div><span class="k">WIND_X</span> <span class="v" id="d-wind">0.0</span></div>
+  <div><span class="k">GAME_SPEED</span> <span class="v" id="d-gspd">4</span></div>
+  <div><span class="k">FPS</span> <span class="v" id="d-fps">—</span></div>
+</div>
+
+<div id="code-box"><span class="cm">// Intégration dans le jeu (Rôle A)</span>
+
+<span class="kw">import</span> { ParticleSystem } <span class="kw">from</span> <span class="str">'./Particle'</span>;
+
+<span class="cm">// Initialisation</span>
+<span class="kw">const</span> particles = <span class="kw">new</span> <span class="fn">ParticleSystem</span>(ctx, {
+  canvasWidth:  <span class="num">700</span>,
+  canvasHeight: <span class="num">200</span>,
+  type:  <span class="str">'rain'</span>,   <span class="cm">// ou 'snow'</span>
+  count: <span class="num">120</span>,
+  windX: <span class="num">0</span>,
+});
+
+<span class="cm">// Dans gameLoop() — avant draw() des entités</span>
+<span class="kw">function</span> <span class="fn">gameLoop</span>() {
+  particles.<span class="fn">update</span>(windX, gameSpeed);
+  particles.<span class="fn">draw</span>();     <span class="cm">// arrière-plan</span>
+  <span class="fn">drawDino</span>();
+  <span class="fn">drawObstacles</span>();
+}
+
+<span class="cm">// Changement à chaud</span>
+particles.<span class="fn">setType</span>(<span class="str">'snow'</span>);
+particles.<span class="fn">setWind</span>(<span class="num">2.5</span>);</div>
+
+<script>
+
+
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+const CW     = canvas.width;
+const CH     = canvas.height;
+
+
+let currentType = 'rain';
+let windX       = 0;
+let gameSpeed   = 4;
+
+
+let lastTime  = performance.now();
+let fps       = 0;
+
+
+const RAIN_CFG = {
+  vyMin: 8, vyMax: 16, vxBase: -1,
+  sizeMin: 1, sizeMax: 1.8,
+  lenMin: 10, lenMax: 22,
+  opMin: 0.25, opMax: 0.65,
+};
+const SUN_CFG = {
+  
+  vyMin: 0.3, vyMax: 1.0,
+  vxMin: 0.5, vxMax: 1.5,
+  sizeMin: 2,  sizeMax: 6,
+  lenMin: 30,  lenMax: 80,
+  opMin: 0.05, opMax: 0.25,
+};
+
+function lerp(a, b, t) { return a + (b - a) * t; }
+function rand(min, max) { return min + Math.random() * (max - min); }
+
+
+class Particle {
+  constructor(type, cW, cH, randomY = false) {
+    this.type = type;
+    this.cW   = cW;
+    this.cH   = cH;
+    this.wobblePhase = 0;
+    this.rainLen     = 0;
+    this.init(randomY);
+  }
+
+  init(randomY) {
+    const depth = Math.random();
+    this.depth  = depth;
+
+    if (this.type === 'rain') {
+      const c = RAIN_CFG;
+      this.vy      = lerp(c.vyMin, c.vyMax, depth);
+      this.vx      = c.vxBase;
+      this.x       = rand(0, this.cW);
+      this.y       = randomY ? rand(0, this.cH) : -20;
+      this.size    = lerp(c.sizeMin, c.sizeMax, depth);
+      this.opacity = lerp(c.opMin, c.opMax, depth);
+      this.rainLen = lerp(c.lenMin, c.lenMax, depth);
+    } else {
+      
+      const c = SUN_CFG;
+      this.vy      = lerp(c.vyMin, c.vyMax, depth);
+      this.vx      = lerp(c.vxMin, c.vxMax, depth);
+      this.x       = randomY ? rand(0, this.cW) : rand(0, this.cW);
+      this.y       = randomY ? rand(0, this.cH) : rand(-80, -10);
+      this.size    = lerp(c.sizeMin, c.sizeMax, depth);
+      this.opacity = lerp(c.opMin, c.opMax, depth);
+      this.rainLen = lerp(c.lenMin, c.lenMax, depth);
+    }
+  }
+
+  update(wx, gs) {
+    if (this.type === 'sun') {
+      // Les rayons glissent en diagonale, légèrement affectés par le vent
+      this.vx = lerp(SUN_CFG.vxMin, SUN_CFG.vxMax, this.depth) + wx * 0.1;
+    } else {
+      this.vx = RAIN_CFG.vxBase + wx * this.depth;
+    }
+
+    const parallax = gs * this.depth * 0.15;
+    this.x += this.vx - parallax;
+    this.y += this.vy;
+
+    if (this.x > this.cW + 20) this.x = -20;
+    if (this.x < -20)           this.x = this.cW + 20;
+    if (this.y > this.cH + 30)  this.init(false);
+  }
+
+  draw(c) {
+    c.save();
+    c.globalAlpha = this.opacity;
+
+    if (this.type === 'rain') {
+      const angle = Math.atan2(this.vy, this.vx);
+      const ex = this.x + Math.cos(angle) * this.rainLen;
+      const ey = this.y + Math.sin(angle) * this.rainLen;
+      const g  = c.createLinearGradient(this.x, this.y, ex, ey);
+      g.addColorStop(0, `rgba(174,214,241,0)`);
+      g.addColorStop(1, `rgba(174,214,241,${this.opacity})`);
+      c.beginPath();
+      c.strokeStyle = g;
+      c.lineWidth   = this.size;
+      c.lineCap     = 'round';
+      c.moveTo(this.x, this.y);
+      c.lineTo(ex, ey);
+      c.stroke();
+    } else {
+      
+      const angle = Math.atan2(this.vy, this.vx);
+      const ex = this.x + Math.cos(angle) * this.rainLen;
+      const ey = this.y + Math.sin(angle) * this.rainLen;
+      const g  = c.createLinearGradient(this.x, this.y, ex, ey);
+      g.addColorStop(0, `rgba(255, 220, 50, 0)`);
+      g.addColorStop(0.4, `rgba(255, 200, 0, ${this.opacity})`);
+      g.addColorStop(1, `rgba(255, 150, 0, 0)`);
+      c.beginPath();
+      c.strokeStyle = g;
+      c.lineWidth   = this.size;
+      c.lineCap     = 'round';
+      c.moveTo(this.x, this.y);
+      c.lineTo(ex, ey);
+      c.stroke();
+    }
+    c.restore();
+  }
+}
+
+
+class ParticleSystem {
+  constructor(type, count, cW, cH) {
+    this.cW = cW; this.cH = cH;
+    this.particles = [];
+    this.build(type, count, true);
+  }
+  build(type, count, randomY) {
+    this.type = type;
+    this.particles = Array.from({ length: count },
+      () => new Particle(type, this.cW, this.cH, randomY));
+    this.particles.sort((a, b) => a.depth - b.depth);
+  }
+  update(wx, gs) { for (const p of this.particles) p.update(wx, gs); }
+  draw(c) { for (const p of this.particles) p.draw(c); }
+}
+
+let sys = new ParticleSystem('rain', 120, CW, CH);
+
+function setType(t) {
+  currentType = t;
+  rebuildSystem();
+  document.getElementById('btn-rain').className = 'toggle-btn' + (t==='rain' ? ' active-rain' : '');
+  document.getElementById('btn-sun').className  = 'toggle-btn' + (t==='sun'  ? ' active-sun'  : '');
+}
+
+function rebuildSystem() {
+  const count = parseInt(document.getElementById('sl-count').value);
+  sys = new ParticleSystem(currentType, count, CW, CH);
+}
+
+
+function drawBg() {
+  const sky = ctx.createLinearGradient(0, 0, 0, CH);
+  if (currentType === 'rain') {
+    sky.addColorStop(0, '#1a2533');
+    sky.addColorStop(1, '#2c3e50');
+  } else {
+    
+    sky.addColorStop(0, '#87ceeb');
+    sky.addColorStop(1, '#ffe0a0');
+  }
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, CW, CH);
+
+  
+  if (currentType === 'sun') {
+    const sg = ctx.createRadialGradient(620, 40, 5, 620, 40, 55);
+    sg.addColorStop(0,   'rgba(255,240,100,0.95)');
+    sg.addColorStop(0.5, 'rgba(255,200,0,0.4)');
+    sg.addColorStop(1,   'rgba(255,180,0,0)');
+    ctx.fillStyle = sg;
+    ctx.beginPath();
+    ctx.arc(620, 40, 55, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  
+  ctx.fillStyle = currentType === 'rain' ? '#1a2a1a' : '#5a9e3a';
+  ctx.fillRect(0, CH - 30, CW, 30);
+
+  
+  ctx.fillStyle = currentType === 'rain' ? '#2ecc71' : '#3d8b2a';
+  ctx.fillRect(0, CH - 30, CW, 2);
+}
+
+
+function loop(now) {
+  const dt = now - lastTime;
+  fps = Math.round(1000 / dt);
+  lastTime = now;
+
+  drawBg();
+  sys.update(windX, gameSpeed);
+  sys.draw(ctx);
+
+  
+  document.getElementById('d-type').textContent  = currentType;
+  document.getElementById('d-count').textContent = sys.particles.length;
+  document.getElementById('d-wind').textContent  = windX.toFixed(1);
+  document.getElementById('d-gspd').textContent  = gameSpeed;
+  document.getElementById('d-fps').textContent   = fps;
+
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
